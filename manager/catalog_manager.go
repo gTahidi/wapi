@@ -473,7 +473,6 @@ func (cm *CatalogManager) UploadFeedCSV(feedId string, file io.Reader, filename,
 	return &res, nil
 }
 
-// UploadFeedCSVFromURL triggers a feed ingestion from a hosted CSV URL.
 func (cm *CatalogManager) UploadFeedCSVFromURL(feedId, csvURL string, updateOnly bool) (*FeedUploadResponse, error) {
 	apiPath := strings.Join([]string{feedId, "uploads"}, "/")
 	apiRequest := cm.requester.NewApiRequest(apiPath, http.MethodPost)
@@ -498,7 +497,6 @@ func (cm *CatalogManager) UploadFeedCSVFromURL(feedId, csvURL string, updateOnly
 	return &res, nil
 }
 
-// ListFeedUploads lists uploads for a product feed.
 func (cm *CatalogManager) ListFeedUploads(feedId string) ([]FeedUploadSession, error) {
 	apiPath := strings.Join([]string{feedId, "uploads"}, "/")
 	apiRequest := cm.requester.NewApiRequest(apiPath, http.MethodGet)
@@ -515,7 +513,6 @@ func (cm *CatalogManager) ListFeedUploads(feedId string) ([]FeedUploadSession, e
 	return res.Data, nil
 }
 
-// GetFeedUploadStatus fetches a single upload’s status/diagnostics.
 func (cm *CatalogManager) GetFeedUploadStatus(uploadId string) (*FeedUploadErrorReportResponse, error) {
 	apiRequest := cm.requester.NewApiRequest(uploadId, http.MethodGet)
 	// include error_report field for convenience
@@ -531,7 +528,6 @@ func (cm *CatalogManager) GetFeedUploadStatus(uploadId string) (*FeedUploadError
 	return &res, nil
 }
 
-// GetFeedUploadErrors fetches a sampling of errors/warnings for an upload session.
 func (cm *CatalogManager) GetFeedUploadErrors(uploadId string) ([]FeedUploadError, error) {
 	apiPath := strings.Join([]string{uploadId, "errors"}, "/")
 	apiRequest := cm.requester.NewApiRequest(apiPath, http.MethodGet)
@@ -548,7 +544,6 @@ func (cm *CatalogManager) GetFeedUploadErrors(uploadId string) ([]FeedUploadErro
 	return res.Data, nil
 }
 
-// RequestFeedUploadErrorReport triggers generation of a full error report.
 func (cm *CatalogManager) RequestFeedUploadErrorReport(uploadId string) (bool, error) {
 	apiPath := strings.Join([]string{uploadId, "error_report"}, "/")
 	apiRequest := cm.requester.NewApiRequest(apiPath, http.MethodPost)
@@ -565,7 +560,6 @@ func (cm *CatalogManager) RequestFeedUploadErrorReport(uploadId string) (bool, e
 	return res.Success, nil
 }
 
-// GetFeedUploadErrorReport fetches the error_report field of an upload session.
 func (cm *CatalogManager) GetFeedUploadErrorReport(uploadId string) (*FeedUploadErrorReportResponse, error) {
 	apiRequest := cm.requester.NewApiRequest(uploadId, http.MethodGet)
 	apiRequest.AddField(request_client.ApiRequestQueryParamField{Name: "error_report", Filters: map[string]string{}})
@@ -580,17 +574,12 @@ func (cm *CatalogManager) GetFeedUploadErrorReport(uploadId string) (*FeedUpload
 	return &res, nil
 }
 
-// ProductFeedSchedule represents schedule config for Google Sheets or hosted feeds.
 type ProductFeedSchedule struct {
 	Url      string `json:"url"`
 	Interval string `json:"interval"` // e.g., HOURLY, DAILY; Meta specific values
 	Hour     *int   `json:"hour,omitempty"`
 }
 
-// CreateScheduledProductFeed creates a scheduled feed that fetches from a URL (Google Sheets supported via shareable link).
-// When updateOnly is true, the feed behaves in update-only mode.
-// ingestionSourceType: "PRIMARY_FEED" or "SUPPLEMENTARY_FEED" (optional)
-// primaryFeedIds required for Supplementary feeds.
 func (cm *CatalogManager) CreateScheduledProductFeed(
 	catalogId string,
 	name string,
@@ -621,35 +610,67 @@ func (cm *CatalogManager) CreateScheduledProductFeed(
 	if err != nil {
 		return nil, err
 	}
-	var res ProductFeed
-	if err := json.Unmarshal([]byte(response), &res); err != nil {
-		return nil, err
+
+	// Meta's API returns a minimal response: {"id": "feed_id"}
+	// Parse this simple format first
+	var apiResp struct {
+		ID string `json:"id"`
 	}
-	return &res, nil
+	if err := json.Unmarshal([]byte(response), &apiResp); err != nil {
+		return nil, fmt.Errorf("failed to parse feed creation response: %w", err)
+	}
+
+	// Validate we got an ID
+	if apiResp.ID == "" {
+		return nil, fmt.Errorf("feed created but no ID returned from Meta API")
+	}
+
+	// Return a ProductFeed with the ID from Meta and the name we sent
+	return &ProductFeed{
+		Id:   apiResp.ID,
+		Name: name,
+		// FileName is not returned on creation, only when listing feeds
+	}, nil
 }
 
 // CreateProductFeed creates a product feed without a schedule (for immediate CSV uploads).
 // Use UploadFeedCSV or UploadFeedCSVFromURL afterwards to ingest data.
 func (cm *CatalogManager) CreateProductFeed(catalogId string, name string) (*ProductFeed, error) {
-    apiPath := strings.Join([]string{catalogId, "product_feeds"}, "/")
-    apiRequest := cm.requester.NewApiRequest(apiPath, http.MethodPost)
-    body := map[string]interface{}{
-        "name": name,
-    }
-    payload, err := json.Marshal(body)
-    if err != nil {
-        return nil, fmt.Errorf("failed to marshal feed body: %w", err)
-    }
-    apiRequest.SetBody(string(payload))
-    response, err := apiRequest.Execute()
-    if err != nil {
-        return nil, err
-    }
-    var res ProductFeed
-    if err := json.Unmarshal([]byte(response), &res); err != nil {
-        return nil, err
-    }
-    return &res, nil
+	apiPath := strings.Join([]string{catalogId, "product_feeds"}, "/")
+	apiRequest := cm.requester.NewApiRequest(apiPath, http.MethodPost)
+	body := map[string]interface{}{
+		"name": name,
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal feed body: %w", err)
+	}
+	apiRequest.SetBody(string(payload))
+	response, err := apiRequest.Execute()
+	if err != nil {
+		return nil, err
+	}
+
+	// Meta's API returns a minimal response: {"id": "feed_id"}
+	// Parse this simple format first
+	var apiResp struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(response), &apiResp); err != nil {
+		return nil, fmt.Errorf("failed to parse feed creation response: %w", err)
+	}
+
+	// Validate we got an ID
+	if apiResp.ID == "" {
+		return nil, fmt.Errorf("feed created but no ID returned from Meta API")
+	}
+
+	// Return a ProductFeed with the ID from Meta and the name we sent
+	return &ProductFeed{
+		Id:   apiResp.ID,
+		Name: name,
+		// FileName is not returned on creation, only when listing feeds
+	}, nil
 }
 
 // UpsertProductItem updates or creates a product item using Meta’s format.
