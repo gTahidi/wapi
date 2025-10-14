@@ -636,44 +636,47 @@ func (cm *CatalogManager) CreateScheduledProductFeed(
 // CreateProductFeed creates a product feed without a schedule (for immediate CSV uploads).
 // Use UploadFeedCSV or UploadFeedCSVFromURL afterwards to ingest data.
 func (cm *CatalogManager) CreateProductFeed(catalogId string, name string) (*ProductFeed, error) {
-	apiPath := strings.Join([]string{catalogId, "product_feeds"}, "/")
-	apiRequest := cm.requester.NewApiRequest(apiPath, http.MethodPost)
-	body := map[string]interface{}{
-		"name": name,
-	}
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal feed body: %w", err)
-	}
-	apiRequest.SetBody(string(payload))
-	response, err := apiRequest.Execute()
-	if err != nil {
-		return nil, err
-	}
+    apiPath := strings.Join([]string{catalogId, "product_feeds"}, "/")
+    apiRequest := cm.requester.NewApiRequest(apiPath, http.MethodPost)
+    body := map[string]interface{}{
+        "name": name,
+    }
+    payload, err := json.Marshal(body)
+    if err != nil {
+        return nil, fmt.Errorf("failed to marshal feed body: %w", err)
+    }
+    apiRequest.SetBody(string(payload))
+    response, err := apiRequest.Execute()
+    if err != nil {
+        return nil, err
+    }
 
-	// Meta's API returns a minimal response: {"id": "feed_id"}
-	// Parse this simple format first
-	var apiResp struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal([]byte(response), &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse feed creation response: %w", err)
-	}
+    // Debug: Log the raw response from Meta's API
+    fmt.Printf("[DEBUG] CreateProductFeed - Raw Meta API response: %s\n", response)
 
-	// Validate we got an ID
-	if apiResp.ID == "" {
-		return nil, fmt.Errorf("feed created but no ID returned from Meta API")
-	}
+    // Meta's API returns a minimal response: {"id": "feed_id"}
+    // Parse this simple format first
+    var apiResp struct {
+        ID string `json:"id"`
+    }
+    if err := json.Unmarshal([]byte(response), &apiResp); err != nil {
+        return nil, fmt.Errorf("failed to parse feed creation response (raw: %s): %w", response, err)
+    }
 
-	// Return a ProductFeed with the ID from Meta and the name we sent
-	return &ProductFeed{
-		Id:   apiResp.ID,
-		Name: name,
-		// FileName is not returned on creation, only when listing feeds
-	}, nil
+    // Validate we got an ID
+    if apiResp.ID == "" {
+        return nil, fmt.Errorf("feed created but no ID returned from Meta API (raw response: %s)", response)
+    }
+
+    // Return a ProductFeed with the ID from Meta and the name we sent
+    return &ProductFeed{
+        Id:   apiResp.ID,
+        Name: name,
+        // FileName is not returned on creation, only when listing feeds
+    }, nil
 }
 
-// UpsertProductItem updates or creates a product item using Meta’s format.
+// UpsertProductItem updates or creates a product item using Meta's format.
 // fields should include at least retailer_id, name, price, currency, image_url, availability, etc.
 func (cm *CatalogManager) UpsertProductItem(catalogId string, fields map[string]interface{}) (*ProductItem, error) {
 	apiPath := strings.Join([]string{catalogId, "products"}, "/")
@@ -681,7 +684,6 @@ func (cm *CatalogManager) UpsertProductItem(catalogId string, fields map[string]
 	payload, err := json.Marshal(fields)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshall product fields: %w", err)
-
 	}
 	apiRequest.SetBody(string(payload))
 	response, err := apiRequest.Execute()
