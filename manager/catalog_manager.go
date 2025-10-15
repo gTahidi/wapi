@@ -265,6 +265,10 @@ type CatalogFetchResponseEdge struct {
 	Paging internal.WhatsAppBusinessApiPaginationMeta `json:"paging"`
 }
 
+// GetAllCatalogs retrieves catalogs linked to this WhatsApp Business Account
+// via association (i.e., /{business_account_id}/product_catalogs).
+// Note: This is not the same as listing all catalogs OWNED by the business.
+// For owned catalogs, use ListOwnedCatalogs.
 func (cm *CatalogManager) GetAllCatalogs() (*CatalogFetchResponseEdge, error) {
 	apiPath := strings.Join([]string{cm.businessAccountId, "product_catalogs"}, "/")
 	apiRequest := cm.requester.NewApiRequest(apiPath, http.MethodGet)
@@ -395,22 +399,58 @@ func (cm *CatalogManager) GetCatalogProducts(catalogId string) ([]ProductItem, e
 }
 
 type CreateProductCatalogOptions struct {
-	Success string `json:"success,omitempty"`
+    Success string `json:"success,omitempty"`
 }
 
+// Deprecated: CreateNewProductCatalog misused the Graph API by calling
+// POST /{business_account_id}/product_catalogs without a body. That endpoint
+// does not create a catalog; it associates an EXISTING catalog with the
+// WhatsApp Business Account and requires a catalog_id in the request body.
+//
+// Use CreateCatalog to create a new catalog owned by the business
+// (POST /{business_account_id}/owned_product_catalogs) and
+// AssociateCatalog to link an existing catalog to this business account.
 func (cm *CatalogManager) CreateNewProductCatalog() (CreateProductCatalogOptions, error) {
-	apiRequest := cm.requester.NewApiRequest(strings.Join([]string{cm.businessAccountId, "product_catalogs"}, "/"), http.MethodPost)
-	response, err := apiRequest.Execute()
-	if err != nil {
-		// Return immediately on execution error; do not attempt to decode
-		return CreateProductCatalogOptions{}, fmt.Errorf("create catalog request failed: %w", err)
-	}
-	var responseToReturn CreateProductCatalogOptions
-	if err := json.Unmarshal([]byte(response), &responseToReturn); err != nil {
-		// Return zero-value options with decoding context for callers
-		return CreateProductCatalogOptions{}, fmt.Errorf("decode create catalog response failed: %w", err)
-	}
-	return responseToReturn, nil
+    return CreateProductCatalogOptions{}, fmt.Errorf(
+        "CreateNewProductCatalog is deprecated: use CreateCatalog to create or AssociateCatalog to link an existing catalog",
+    )
+}
+
+// AssociateCatalog associates an existing product catalog to this business account (WABA).
+// Endpoint: POST /{business_account_id}/product_catalogs
+// Body: { "catalog_id": "<catalog_id>" }
+// Returns true on success.
+func (cm *CatalogManager) AssociateCatalog(catalogId string) (bool, error) {
+    if strings.TrimSpace(catalogId) == "" {
+        return false, fmt.Errorf("catalogId is required to associate a catalog")
+    }
+
+    apiPath := strings.Join([]string{cm.businessAccountId, "product_catalogs"}, "/")
+    apiRequest := cm.requester.NewApiRequest(apiPath, http.MethodPost)
+
+    body := map[string]string{
+        "catalog_id": catalogId,
+    }
+    payload, err := json.Marshal(body)
+    if err != nil {
+        return false, fmt.Errorf("failed to marshal association body: %w", err)
+    }
+    apiRequest.SetBody(string(payload))
+
+    response, err := apiRequest.Execute()
+    if err != nil {
+        return false, err
+    }
+    var res struct {
+        Success bool `json:"success"`
+    }
+    if err := json.Unmarshal([]byte(response), &res); err != nil {
+        return false, fmt.Errorf("failed to parse association response: %w", err)
+    }
+    if !res.Success {
+        return false, fmt.Errorf("catalog association failed")
+    }
+    return true, nil
 }
 
 // ListProductFeeds lists product feeds for a given catalog.
@@ -725,6 +765,11 @@ func (cm *CatalogManager) UpdateProductImages(catalogId, retailerId, imageURL st
 
 // CreateCatalog creates a new product catalog for the business account.
 // vertical: "commerce" or "ecommerce" (default: "commerce")
+// Returns the created catalog with ID and name.
+// CreateCatalog creates a new product catalog owned by the business account.
+// vertical: "commerce" or "ecommerce" (default: "commerce")
+// Note: The business must accept Meta Commerce Terms of Service (TOS)
+// in Business Manager before this endpoint can succeed.
 // Returns the created catalog with ID and name.
 func (cm *CatalogManager) CreateCatalog(name string, vertical string) (*Catalog, error) {
 	if vertical == "" {
