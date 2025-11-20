@@ -795,16 +795,19 @@ func (cm *CatalogManager) CreateCatalog(name string, vertical string) (*Catalog,
 		return nil, err
 	}
 	
+	// Debug: Log the raw response from Meta's API
+	fmt.Printf("[DEBUG] CreateCatalog - Raw Meta API response: %s\n", response)
+	
 	// Meta returns {"id": "catalog_id"}
 	var apiResp struct {
 		ID string `json:"id"`
 	}
 	if err := json.Unmarshal([]byte(response), &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse catalog creation response: %w", err)
+		return nil, fmt.Errorf("failed to parse catalog creation response (raw: %s): %w", response, err)
 	}
 	
 	if apiResp.ID == "" {
-		return nil, fmt.Errorf("catalog created but no ID returned from Meta API")
+		return nil, fmt.Errorf("catalog created but no ID returned from Meta API (raw response: %s)", response)
 	}
 	
 	// Return catalog with ID and name

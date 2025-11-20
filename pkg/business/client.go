@@ -178,6 +178,7 @@ func (client *BusinessClient) FetchAnalytics(options AccountAnalyticsOptions) (W
 	if err != nil {
 		// return wapi.go custom error here
 		fmt.Println("Error while fetching business account", err)
+		return WhatsappBusinessAccountAnalyticsResponse{}, err
 	}
 	var responseWrapper struct {
 		Analytics WhatsappBusinessAccountAnalyticsResponse `json:"analytics"`
@@ -349,9 +350,12 @@ func (client *BusinessClient) ConversationAnalytics(options ConversationAnalytic
 	if err != nil {
 		// return wapi.go custom error here
 		fmt.Println("Error while fetching business account", err)
+		return nil, err
 	}
 	var responseToReturn WhatsAppConversationAnalyticsResponse
-	json.Unmarshal([]byte(response), &responseToReturn)
+	if err := json.Unmarshal([]byte(response), &responseToReturn); err != nil {
+		return nil, err
+	}
 
 	fmt.Println("Response to return is", responseToReturn)
 

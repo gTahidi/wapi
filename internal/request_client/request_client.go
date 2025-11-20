@@ -89,6 +89,11 @@ func (requestClientInstance *RequestClient) request(params RequestCloudApiParams
 	if err != nil {
 		return "", err
 	}
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return "", fmt.Errorf("API request failed with status %d: %s", response.StatusCode, string(body))
+	}
+
 	return string(body), nil
 }
 
@@ -181,7 +186,7 @@ func (request *ApiRequest) Execute() (string, error) {
 
 	if err != nil {
 		fmt.Println("Error while executing business api request", err)
-		return "", nil
+		return "", err
 	}
 
 	return response, err
