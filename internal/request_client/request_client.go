@@ -70,6 +70,8 @@ func (requestClientInstance *RequestClient) request(params RequestCloudApiParams
 	requestPath := strings.Join(
 		[]string{REQUEST_PROTOCOL, "://", requestClientInstance.baseUrl, "/", requestClientInstance.apiVersion, "/", params.Path, queryParamString}, "")
 
+	fmt.Printf("DEBUG: Full API Request URL: %s\n", requestPath)
+
 	httpRequest, err := http.NewRequest(params.Method,
 		requestPath,
 		strings.NewReader(params.Body))
@@ -172,6 +174,7 @@ func (request *ApiRequest) Execute() (string, error) {
 		}
 
 		queryParam["fields"] = fieldsString
+		fmt.Printf("DEBUG: Constructed fields parameter: %s\n", fieldsString)
 	}
 
 	if len(request.QueryParams) > 0 {
