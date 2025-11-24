@@ -227,8 +227,8 @@ type ConversationAnalyticsGranularityType string
 
 const (
 	ConversationAnalyticsGranularityTypeHalfHour ConversationAnalyticsGranularityType = "HALF_HOUR"
-	ConversationAnalyticsGranularityTypeDay      ConversationAnalyticsGranularityType = "DAY"
-	ConversationAnalyticsGranularityTypeMonth    ConversationAnalyticsGranularityType = "MONTH"
+	ConversationAnalyticsGranularityTypeDay      ConversationAnalyticsGranularityType = "DAILY"
+	ConversationAnalyticsGranularityTypeMonth    ConversationAnalyticsGranularityType = "MONTHLY"
 )
 
 type ConversationAnalyticsOptions struct {
